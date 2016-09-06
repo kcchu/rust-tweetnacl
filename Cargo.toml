@@ -1,0 +1,6 @@
+[package]
+name = "tweetnacl"
+version = "0.1.0"
+authors = ["Edwin Chu <edwincheese@gmail.com>"]
+
+[dependencies]
