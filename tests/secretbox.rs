@@ -2,9 +2,13 @@
 // Test vectors adapted from libsodium
 //
 
+#![feature(test)]
 #![allow(non_upper_case_globals)]
 
 extern crate tweetnacl;
+extern crate test;
+
+use test::Bencher;
 
 const firstkey: [u8; 32]
     = [ 0x1b, 0x27, 0x55, 0x64, 0x73, 0xe9, 0x85, 0xd4, 0x62, 0xcd, 0x51,
@@ -64,4 +68,15 @@ fn secretbox2() {
     let rs = tweetnacl::crypto_secretbox_open(&mut out, &c, &nonce, &firstkey);
     assert!(rs.is_ok());
     assert_eq!(out[..], m[..]);
+}
+
+#[bench]
+fn brench64k(b: &mut Bencher) {
+    let mut ms = [255u8; 2^10 * 64];
+    let mut out = [0u8; 2^10 * 64];
+    ms[..32].copy_from_slice(&[0; 32]);
+
+    b.iter(|| {
+        tweetnacl::crypto_secretbox(&mut out, &ms, &nonce, &firstkey)
+    });
 }
