@@ -5,6 +5,17 @@
 
 use std::cmp::min;
 
+macro_rules! sl4 {
+    (&mut $s:expr, $b:expr) => {
+        &mut $s[($b)..(($b) + 4)];
+    };
+    (& $s:expr, $b:expr) => {
+        & $s[($b)..(($b) + 4)];
+    };
+}
+
+pub struct CryptoError;
+
 type gf = [i64; 16];
 
 const _0: [u8; 16] = [0; 16];
@@ -17,16 +28,6 @@ const D2: gf = [0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0, 
 const X: gf = [0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169];
 const Y: gf = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666];
 const I: gf = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
-
-
-macro_rules! sl4 {
-    (&mut $s:expr, $b:expr) => {
-        &mut $s[($b)..(($b) + 4)];
-    };
-    (& $s:expr, $b:expr) => {
-        & $s[($b)..(($b) + 4)];
-    };
-}
 
 fn L32(x: u32, c: isize) -> u32 {
     (x << c) | ((x & 0xffffffff) >> (32 - c))
@@ -59,7 +60,10 @@ fn ts64(x: &mut [u8], u: u64) {
     for i in (0..8).rev() { x[i] = u as u8; u >>= 8; }
 }
 
-fn vn(x: &[u8], y: &[u8], n: usize) -> isize {
+fn vn(x: &[u8], y: &[u8]) -> isize {
+    // panic if length of x and y are not equal
+    assert_eq!(x.len(), y.len());
+    let n = x.len();
     let mut d = 0u32;
     for i in 0..n {
         d |= (x[i] ^ y[i]) as u32;
@@ -68,11 +72,13 @@ fn vn(x: &[u8], y: &[u8], n: usize) -> isize {
 }
 
 fn crypto_verify_16(x: &[u8], y: &[u8]) -> isize {
-    vn(x, y, 16)
+    debug_assert_eq!(x.len(), 16);
+    vn(x, y)
 }
 
 fn crypto_verify_32(x: &[u8], y: &[u8]) -> isize {
-    vn(x, y, 32)
+    debug_assert_eq!(x.len(), 32);
+    vn(x, y)
 }
 
 fn core(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
@@ -122,29 +128,27 @@ fn core(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
     }
 }
 
-pub fn crypto_core_salsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8]) -> isize
+pub fn crypto_core_salsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8])
 {
     core(out, inp, k, c, false);
-    0
 }
 
-
-pub fn crypto_core_hsalsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8]) -> isize
+pub fn crypto_core_hsalsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8])
 {
     core(out, inp, k, c, true);
-    0
 }
 
 const SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
-pub fn crypto_stream_salsa20_xor(mut c: &mut[u8], mut m: &[u8], mut b: usize, n: &[u8], k: &[u8]) -> isize {
-    debug_assert_eq!(c.len(), b as usize);
+pub fn crypto_stream_salsa20_xor(mut c: &mut[u8], mut m: &[u8], n: &[u8], k: &[u8]) {
     debug_assert!(m.len() == 0 || m.len() == c.len());
+    debug_assert!(n.len() >= 8);
+    let mut b = c.len();
     let mut z = [0u8; 16];
     let mut x = [0u8; 64];
     let mut u: u32;
     if b == 0 {
-        return 0;
+        return;
     }
     // omitted: FOR(i,16) z[i] = 0;
     for i in 0..8 {
@@ -173,27 +177,23 @@ pub fn crypto_stream_salsa20_xor(mut c: &mut[u8], mut m: &[u8], mut b: usize, n:
             c[i] = if m.len() > 0 { m[i] } else { 0 } ^ x[i]; // c[i] = (m?m[i]:0) ^ x[i];
         }
     }
-    0
 }
 
-pub fn crypto_stream_salsa20(c: &mut[u8], d: usize, n: &[u8], k: &[u8]) -> isize {
-    crypto_stream_salsa20_xor(c, &[], d, n, k)
+pub fn crypto_stream_salsa20(c: &mut[u8], n: &[u8], k: &[u8]) {
+    crypto_stream_salsa20_xor(c, &[], n, k)
 }
 
-pub fn crypto_stream(c: &mut[u8], d: usize, n: &[u8], k: &[u8]) -> isize {
-    debug_assert_eq!(n.len(), 24);
+pub fn crypto_stream(c: &mut[u8], n: &[u8], k: &[u8]) {
     let mut s = [0u8; 32];
     crypto_core_hsalsa20(&mut s, &n[..16], k, SIGMA);
-    crypto_stream_salsa20(c, d, &n[16..], &s)
+    crypto_stream_salsa20(c, &n[16..], &s)
 }
 
-
-pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], d: usize, n: &[u8], k: &[u8]) -> isize {
+pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8]) {
     let mut s = [0u8; 32];
     crypto_core_hsalsa20(&mut s, &n[..16], k, SIGMA);
-    crypto_stream_salsa20_xor(c, m, d, &n[16..], &s)
+    crypto_stream_salsa20_xor(c, m, &n[16..], &s)
 }
-
 
 fn add1305(h: &mut [u32], c: &[u32]) {
     debug_assert_eq!(h.len(), 17);
@@ -210,8 +210,9 @@ const minusp : [u32; 17] = [
     5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252
 ];
 
-pub fn crypto_onetimeauth(out: &mut[u8], mut m: &[u8], mut n: usize, k: &[u8]) -> isize {
-    debug_assert_eq!(m.len(), n);
+pub fn crypto_onetimeauth(out: &mut[u8], mut m: &[u8], k: &[u8]) {
+    debug_assert_eq!(out.len(), 16);
+    let mut n = m.len();
 
     let s: u32;
     let mut u: u32;
@@ -270,34 +271,34 @@ pub fn crypto_onetimeauth(out: &mut[u8], mut m: &[u8], mut n: usize, k: &[u8]) -
     c[16] = 0;
     add1305(&mut h, &c);
     for j in 0..16 { out[j] = h[j] as u8 }
-    0
 }
 
-pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], n: usize, k: &[u8]) -> isize
-{
+pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8]) -> isize {
     let mut x = [0u8; 16];
-    crypto_onetimeauth(&mut x, m, n, k);
-    crypto_verify_16(h, &x)
+    crypto_onetimeauth(&mut x, m, k);
+    crypto_verify_16(&h[..16], &x)
 }
 
-pub fn crypto_secretbox(c: &mut[u8], m: &[u8], d: usize, n: &[u8], k: &[u8]) -> isize {
-    if d < 32 { return -1 }
-    crypto_stream_xor(c, m, d, n, k);
+pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
+    debug_assert_eq!(c.len(), m.len());
+    if c.len() < 32 { return Err(CryptoError) }
+    crypto_stream_xor(c, m, n, k);
     let mut x = [0u8; 16];
-    crypto_onetimeauth(&mut x, &c[32..], d - 32, c);
+    crypto_onetimeauth(&mut x, &c[32..], c);
     c[16..32].copy_from_slice(&x);
     for i in 0..16 { c[i] = 0 }
-    0
+    Ok(())
 }
 
-pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], d: usize, n: &[u8], k: &[u8]) -> isize {
+pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
+    debug_assert_eq!(m.len(), c.len());
     let mut x = [0u8; 32];
-    if d < 32 { return -1 }
-    crypto_stream(&mut x, 32, n, k);
-    if crypto_onetimeauth_verify(&c[16..], &c[32..], d - 32, &x) != 0 {
-        return -1;
+    if m.len() < 32 { return Err(CryptoError) }
+    crypto_stream(&mut x, n, k);
+    if crypto_onetimeauth_verify(&c[16..], &c[32..], &x) != 0 {
+        return Err(CryptoError);
     }
-    crypto_stream_xor(m, c, d, n, k);
+    crypto_stream_xor(m, c, n, k);
     for i in 0..32 { m[i] = 0 }
-    0
+    Ok(())
 }
