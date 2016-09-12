@@ -1,9 +1,11 @@
 #![feature(test)]
 #![allow(non_upper_case_globals)]
 
+extern crate rand;
 extern crate tweetnacl;
 extern crate test;
 
+use rand::Rng;
 use test::Bencher;
 
 const firstkey: [u8; 32]
@@ -16,29 +18,30 @@ const nonce: [u8; 24]
         0xcd, 0x62, 0xbd, 0xa8, 0x75, 0xfc, 0x73, 0xd6,
         0x82, 0x19, 0xe0, 0x03, 0x6b, 0x7a, 0x0b, 0x37 ];
 
-const s1k: usize = 1024;
-const s1m: usize = 1024 * 1024;
-
 #[bench]
 fn secretbox1k(b: &mut Bencher) {
-    let mut ms = [255u8; s1k];
-    let mut out = [0u8; s1k];
-    /* API requires first 32 bytes to be 0 */
-    ms[..32].copy_from_slice(&[0; 32]);
+    let mut m = [0u8; 1024];
+    let mut m2 = [0u8; 1024];
+    let mut c = [0u8; 1024];
+    rand::os::OsRng::new().unwrap().fill_bytes(&mut m[32..]);
 
     b.iter(|| {
-        tweetnacl::crypto_secretbox(&mut out, &ms, &nonce, &firstkey)
+        let rs = tweetnacl::crypto_secretbox(&mut c, &m, &nonce, &firstkey);
+        assert!(rs.is_ok());
+        tweetnacl::crypto_secretbox_open(&mut m2, &c, &nonce, &firstkey)
     });
 }
 
 #[bench]
 fn secretbox1m(b: &mut Bencher) {
-    let mut ms = [255u8; s1m];
-    let mut out = [0u8; s1m];
-    /* API requires first 32 bytes to be 0 */
-    ms[..32].copy_from_slice(&[0; 32]);
+    let mut m = [0u8; 1024 * 1024];
+    let mut m2 = [0u8; 1024 * 1024];
+    let mut c = [0u8; 1024 * 1024];
+    rand::os::OsRng::new().unwrap().fill_bytes(&mut m[32..]);
 
     b.iter(|| {
-        tweetnacl::crypto_secretbox(&mut out, &ms, &nonce, &firstkey)
+        let rs = tweetnacl::crypto_secretbox(&mut c, &m, &nonce, &firstkey);
+        assert!(rs.is_ok());
+        tweetnacl::crypto_secretbox_open(&mut m2, &c, &nonce, &firstkey)
     });
 }

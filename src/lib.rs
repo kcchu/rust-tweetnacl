@@ -5,6 +5,8 @@
 
 use std::cmp::min;
 
+pub struct CryptoError;
+
 macro_rules! sl4 {
     (&mut $s:expr, $b:expr) => {
         &mut $s[($b)..(($b) + 4)];
@@ -23,7 +25,14 @@ macro_rules! sl16 {
     };
 }
 
-pub struct CryptoError;
+#[allow(unused_variables)]
+fn randombytes_(x: &mut [u8]) {
+    panic!("randombytes() is not implemented");
+}
+fn randombytes(x: &mut [u8]) {
+    unsafe { randombytes_impl(x) }
+}
+pub static mut randombytes_impl: fn(x: &mut [u8]) = randombytes_;
 
 type gf = [i64];
 
@@ -43,6 +52,7 @@ fn L32(x: u32, c: isize) -> u32 {
     (x << c) | ((x & 0xffffffff) >> (32 - c))
 }
 
+#[inline(always)]
 fn ld32(x: &[u8]) -> u32 {
     debug_assert_eq!(x.len(), 4);
     let mut u = x[3] as u32;
@@ -58,21 +68,20 @@ fn dl64(x: &[u8]) -> u64 {
     u
 }
 
-fn st32(x: &mut[u8], u: u32) {
+fn st32(x: &mut [u8], u: u32) {
     debug_assert_eq!(x.len(), 4);
     let mut u = u;
     for i in 0..4 { x[i] = u as u8; u >>= 8; }
 }
 
-fn ts64(x: &mut[u8], u: u64) {
+fn ts64(x: &mut [u8], u: u64) {
     debug_assert_eq!(x.len(), 8);
     let mut u = u;
     for i in (0..8).rev() { x[i] = u as u8; u >>= 8; }
 }
 
 fn vn(x: &[u8], y: &[u8]) -> isize {
-    // panic if length of x and y are not equal
-    assert_eq!(x.len(), y.len());
+    if x.len() != y.len() { panic!("the length of x and y are not equal") }
     let n = x.len();
     let mut d = 0u32;
     for i in 0..n {
@@ -81,17 +90,17 @@ fn vn(x: &[u8], y: &[u8]) -> isize {
     (1 & (d.wrapping_sub(1) >> 8)).wrapping_sub(1) as isize /* returns 0 if equal, 0xFF..FF otherwise */
 }
 
-fn crypto_verify_16(x: &[u8], y: &[u8]) -> isize {
+pub fn crypto_verify_16(x: &[u8], y: &[u8]) -> isize {
     debug_assert_eq!(x.len(), 16);
     vn(x, y)
 }
 
-fn crypto_verify_32(x: &[u8], y: &[u8]) -> isize {
+pub fn crypto_verify_32(x: &[u8], y: &[u8]) -> isize {
     debug_assert_eq!(x.len(), 32);
     vn(x, y)
 }
 
-fn core(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
+fn core(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
     debug_assert_eq!(out.len(), if h { 32 } else { 64 });
     debug_assert_eq!(inp.len(), 16);
     debug_assert_eq!(k.len(), 32);
@@ -138,21 +147,21 @@ fn core(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
     }
 }
 
-pub fn crypto_core_salsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8])
+pub fn crypto_core_salsa20(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8])
 {
     core(out, inp, k, c, false);
 }
 
-pub fn crypto_core_hsalsa20(out: &mut[u8], inp: &[u8], k: &[u8], c: &[u8])
+pub fn crypto_core_hsalsa20(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8])
 {
     core(out, inp, k, c, true);
 }
 
 const SIGMA: &'static [u8; 16] = b"expand 32-byte k";
 
-pub fn crypto_stream_salsa20_xor(mut c: &mut[u8], mut m: &[u8], n: &[u8], k: &[u8]) {
-    debug_assert!(m.len() == 0 || m.len() == c.len());
-    debug_assert!(n.len() >= 8);
+pub fn crypto_stream_salsa20_xor(mut c: &mut [u8], mut m: &[u8], n: &[u8], k: &[u8]) {
+    assert!(m.len() == 0 || m.len() == c.len());
+    assert!(n.len() >= 8);
     let mut b = c.len();
     let mut z = [0u8; 16];
     let mut x = [0u8; 64];
@@ -189,22 +198,23 @@ pub fn crypto_stream_salsa20_xor(mut c: &mut[u8], mut m: &[u8], n: &[u8], k: &[u
     }
 }
 
-pub fn crypto_stream_salsa20(c: &mut[u8], n: &[u8], k: &[u8]) {
+pub fn crypto_stream_salsa20(c: &mut [u8], n: &[u8], k: &[u8]) {
     crypto_stream_salsa20_xor(c, &[], n, k)
 }
 
-pub fn crypto_stream(c: &mut[u8], n: &[u8], k: &[u8]) {
+pub fn crypto_stream(c: &mut [u8], n: &[u8], k: &[u8]) {
     let mut s = [0u8; 32];
     crypto_core_hsalsa20(&mut s, &n[..16], k, SIGMA);
     crypto_stream_salsa20(c, &n[16..], &s)
 }
 
-pub fn crypto_stream_xor(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8]) {
+pub fn crypto_stream_xor(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) {
     let mut s = [0u8; 32];
     crypto_core_hsalsa20(&mut s, &n[..16], k, SIGMA);
     crypto_stream_salsa20_xor(c, m, &n[16..], &s)
 }
 
+#[inline(always)]
 fn add1305(h: &mut [u32], c: &[u32]) {
     debug_assert_eq!(h.len(), 17);
     debug_assert_eq!(c.len(), 17);
@@ -220,7 +230,7 @@ const minusp : [u32; 17] = [
     5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252
 ];
 
-pub fn crypto_onetimeauth(out: &mut[u8], mut m: &[u8], k: &[u8]) {
+pub fn crypto_onetimeauth(out: &mut [u8], mut m: &[u8], k: &[u8]) {
     debug_assert_eq!(out.len(), 16);
     let mut n = m.len();
 
@@ -289,8 +299,8 @@ pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8]) -> isize {
     crypto_verify_16(&h[..16], &x)
 }
 
-pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
-    debug_assert_eq!(c.len(), m.len());
+pub fn crypto_secretbox(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
+    if c.len() != m.len() { panic!("the length of c and m are not equal") }
     if c.len() < 32 { panic!("output buffer < 32 bytes") }
     crypto_stream_xor(c, m, n, k);
     let mut x = [0u8; 16];
@@ -300,9 +310,9 @@ pub fn crypto_secretbox(c: &mut[u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),
     Ok(())
 }
 
-pub fn crypto_secretbox_open(m: &mut[u8], c: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
-    debug_assert_eq!(m.len(), c.len());
+pub fn crypto_secretbox_open(m: &mut [u8], c: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
     let mut x = [0u8; 32];
+    if c.len() != m.len() { panic!("the length of c and m are not equal") }
     if m.len() < 32 { panic!("output buffer < 32 bytes") }
     crypto_stream(&mut x, n, k);
     if crypto_onetimeauth_verify(&c[16..], &c[32..], &x) != 0 {
@@ -340,8 +350,8 @@ fn sel25519(p: &mut gf, q: &mut gf, b: i64) {
 fn pack25519(o: &mut [u8], n: &gf) {
     debug_assert_eq!(n.len(), 16);
     let mut b: i64;
-    let m: &mut gf = &mut[0; 16];
-    let t: &mut gf = &mut[0; 16];
+    let m: &mut gf = &mut [0; 16];
+    let t: &mut gf = &mut [0; 16];
     for i in 0..16 { t[i] = n[i] }
     car25519(t);
     car25519(t);
@@ -384,14 +394,17 @@ fn unpack25519(o: &mut gf, n: &[u8]) {
     o[15] &= 0x7fff;
 }
 
+#[inline(always)]
 fn A(o: &mut gf, a: &gf, b: &gf) {
     for i in 0..16 { o[i] = a[i] + b[i] }
 }
 
+#[inline(always)]
 fn Z(o: &mut gf, a: &gf, b: &gf) {
     for i in 0..16 { o[i]=a[i]-b[i] }
 }
 
+#[inline(always)]
 fn M(o: &mut gf, a: &gf, b: &gf) {
     let mut t = [0i64; 31];
     // FOR(i,31) t[i]=0;
@@ -402,6 +415,7 @@ fn M(o: &mut gf, a: &gf, b: &gf) {
     car25519(o);
 }
 
+#[inline(always)]
 fn S(o: &mut gf, a: &gf) {
     M(o, a, a);
 }
@@ -436,7 +450,7 @@ fn pow2523(o: &mut gf, i: &gf) {
     for a in 0..16 { o[a]=c[a] }
 }
 
-pub fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) {
+pub fn crypto_scalarmult(q: &mut [u8], n: &[u8], p: &[u8]) {
     let mut z = [0u8; 32];
     let mut x = [0i64; 80];
     let mut r: i64;
@@ -493,6 +507,37 @@ pub fn crypto_scalarmult(q: &mut[u8], n: &[u8], p: &[u8]) {
     pack25519(q, sl16!(&x, 16));
 }
 
-pub fn crypto_scalarmult_base(q: &mut[u8], n: &[u8]) {
-    crypto_scalarmult(q, n, _9)
+pub fn crypto_scalarmult_base(q: &mut [u8], n: &[u8]) {
+    crypto_scalarmult(q, n, _9);
+}
+
+pub fn crypto_box_keypair(y: &mut [u8], x: &mut [u8]) {
+    randombytes(x);
+    crypto_scalarmult_base(y,x);
+}
+
+pub fn crypto_box_beforenm(k: &mut [u8], y: &[u8], x: &[u8]) {
+    let mut s = [0u8; 32];
+    crypto_scalarmult(&mut s, x, y);
+    crypto_core_hsalsa20(k, _0, &s, SIGMA);
+}
+
+pub fn crypto_box_afternm(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
+    crypto_secretbox(c, m, n, k)
+}
+
+pub fn crypto_box_open_afternm(m: &mut [u8], c: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
+    crypto_secretbox_open(m, c, n, k)
+}
+
+pub fn crypto_box(c: &mut [u8], m: &[u8], n: &[u8], y: &[u8], x: &[u8]) -> Result<(),CryptoError> {
+    let mut k = [0u8; 32];
+    crypto_box_beforenm(&mut k, y, x);
+    crypto_box_afternm(c, m, n, &k)
+}
+
+pub fn crypto_box_open(m: &mut [u8], c: &[u8], n: &[u8], y: &[u8], x: &[u8]) -> Result<(),CryptoError> {
+    let mut k = [0u8; 32];
+    crypto_box_beforenm(&mut k, y, x);
+    crypto_box_open_afternm(m, c, n, &k)
 }
