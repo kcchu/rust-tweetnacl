@@ -4,4 +4,5 @@ version = "0.1.0"
 authors = ["Edwin Chu <edwincheese@gmail.com>"]
 
 [dev-dependencies]
-rand="0.3"
+rand = "0.3.14"
+rustc-serialize="0.3.19"

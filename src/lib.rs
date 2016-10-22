@@ -4,10 +4,22 @@
 #![allow(non_upper_case_globals)]
 
 use std::cmp::min;
+use std::num::Wrapping;
 
 pub struct CryptoError;
 
+type u64w = Wrapping<u64>;
+
 macro_rules! sl4 {
+    (&mut $s:expr, $b:expr) => {
+        &mut $s[($b)..(($b) + 4)];
+    };
+    (& $s:expr, $b:expr) => {
+        & $s[($b)..(($b) + 4)];
+    };
+}
+
+macro_rules! sl8 {
     (&mut $s:expr, $b:expr) => {
         &mut $s[($b)..(($b) + 4)];
     };
@@ -54,7 +66,6 @@ fn L32(x: u32, c: isize) -> u32 {
 
 #[inline(always)]
 fn ld32(x: &[u8]) -> u32 {
-    debug_assert_eq!(x.len(), 4);
     let mut u = x[3] as u32;
     u = (u << 8) | x[2] as u32;
     u = (u << 8) | x[1] as u32;
@@ -62,20 +73,17 @@ fn ld32(x: &[u8]) -> u32 {
 }
 
 fn dl64(x: &[u8]) -> u64 {
-    debug_assert_eq!(x.len(), 8);
     let mut u = 0u64;
     for i in 0..8 { u = (u << 8) | x[i] as u64 }
     u
 }
 
 fn st32(x: &mut [u8], u: u32) {
-    debug_assert_eq!(x.len(), 4);
     let mut u = u;
     for i in 0..4 { x[i] = u as u8; u >>= 8; }
 }
 
 fn ts64(x: &mut [u8], u: u64) {
-    debug_assert_eq!(x.len(), 8);
     let mut u = u;
     for i in (0..8).rev() { x[i] = u as u8; u >>= 8; }
 }
@@ -91,21 +99,14 @@ fn vn(x: &[u8], y: &[u8]) -> isize {
 }
 
 pub fn crypto_verify_16(x: &[u8], y: &[u8]) -> isize {
-    debug_assert_eq!(x.len(), 16);
     vn(x, y)
 }
 
 pub fn crypto_verify_32(x: &[u8], y: &[u8]) -> isize {
-    debug_assert_eq!(x.len(), 32);
     vn(x, y)
 }
 
 fn core(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
-    debug_assert_eq!(out.len(), if h { 32 } else { 64 });
-    debug_assert_eq!(inp.len(), 16);
-    debug_assert_eq!(k.len(), 32);
-    debug_assert_eq!(c.len(), 16);
-
     let mut w = [0u32; 16];
     let mut x = [0u32; 16];
     let mut y = [0u32; 16];
@@ -216,8 +217,6 @@ pub fn crypto_stream_xor(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) {
 
 #[inline(always)]
 fn add1305(h: &mut [u32], c: &[u32]) {
-    debug_assert_eq!(h.len(), 17);
-    debug_assert_eq!(c.len(), 17);
     let mut u = 0u32;
     for j in 0..17 {
         u = u.wrapping_add(h[j].wrapping_add(c[j]));
@@ -231,7 +230,6 @@ const minusp : [u32; 17] = [
 ];
 
 pub fn crypto_onetimeauth(out: &mut [u8], mut m: &[u8], k: &[u8]) {
-    debug_assert_eq!(out.len(), 16);
     let mut n = m.len();
 
     let s: u32;
@@ -348,7 +346,6 @@ fn sel25519(p: &mut gf, q: &mut gf, b: i64) {
 }
 
 fn pack25519(o: &mut [u8], n: &gf) {
-    debug_assert_eq!(n.len(), 16);
     let mut b: i64;
     let m: &mut gf = &mut [0; 16];
     let t: &mut gf = &mut [0; 16];
@@ -540,4 +537,113 @@ pub fn crypto_box_open(m: &mut [u8], c: &[u8], n: &[u8], y: &[u8], x: &[u8]) -> 
     let mut k = [0u8; 32];
     crypto_box_beforenm(&mut k, y, x);
     crypto_box_open_afternm(m, c, n, &k)
+}
+
+fn R(x: u64w, c: usize) -> u64w { (x >> c) | (x << (64 - c)) }
+fn Ch(x: u64w, y: u64w, z: u64w) -> u64w { (x & y) ^ (!x & z) }
+fn Maj(x: u64w, y: u64w, z: u64w) -> u64w { (x & y) ^ (x & z) ^ (y & z) }
+fn Sigma0(x: u64w) -> u64w { R(x,28) ^ R(x,34) ^ R(x,39) }
+fn Sigma1(x: u64w) -> u64w { R(x,14) ^ R(x,18) ^ R(x,41) }
+fn sigma0(x: u64w) -> u64w { R(x, 1) ^ R(x, 8) ^ (x >> 7) }
+fn sigma1(x: u64w) -> u64w { R(x,19) ^ R(x,61) ^ (x >> 6) }
+
+const K: [u64; 80] =
+[
+    0x428a2f98d728ae22, 0x7137449123ef65cd, 0xb5c0fbcfec4d3b2f, 0xe9b5dba58189dbbc,
+    0x3956c25bf348b538, 0x59f111f1b605d019, 0x923f82a4af194f9b, 0xab1c5ed5da6d8118,
+    0xd807aa98a3030242, 0x12835b0145706fbe, 0x243185be4ee4b28c, 0x550c7dc3d5ffb4e2,
+    0x72be5d74f27b896f, 0x80deb1fe3b1696b1, 0x9bdc06a725c71235, 0xc19bf174cf692694,
+    0xe49b69c19ef14ad2, 0xefbe4786384f25e3, 0x0fc19dc68b8cd5b5, 0x240ca1cc77ac9c65,
+    0x2de92c6f592b0275, 0x4a7484aa6ea6e483, 0x5cb0a9dcbd41fbd4, 0x76f988da831153b5,
+    0x983e5152ee66dfab, 0xa831c66d2db43210, 0xb00327c898fb213f, 0xbf597fc7beef0ee4,
+    0xc6e00bf33da88fc2, 0xd5a79147930aa725, 0x06ca6351e003826f, 0x142929670a0e6e70,
+    0x27b70a8546d22ffc, 0x2e1b21385c26c926, 0x4d2c6dfc5ac42aed, 0x53380d139d95b3df,
+    0x650a73548baf63de, 0x766a0abb3c77b2a8, 0x81c2c92e47edaee6, 0x92722c851482353b,
+    0xa2bfe8a14cf10364, 0xa81a664bbc423001, 0xc24b8b70d0f89791, 0xc76c51a30654be30,
+    0xd192e819d6ef5218, 0xd69906245565a910, 0xf40e35855771202a, 0x106aa07032bbd1b8,
+    0x19a4c116b8d2d0c8, 0x1e376c085141ab53, 0x2748774cdf8eeb99, 0x34b0bcb5e19b48a8,
+    0x391c0cb3c5c95a63, 0x4ed8aa4ae3418acb, 0x5b9cca4f7763e373, 0x682e6ff3d6b2b8a3,
+    0x748f82ee5defb2fc, 0x78a5636f43172f60, 0x84c87814a1f0ab72, 0x8cc702081a6439ec,
+    0x90befffa23631e28, 0xa4506cebde82bde9, 0xbef9a3f7b2c67915, 0xc67178f2e372532b,
+    0xca273eceea26619c, 0xd186b8c721c0c207, 0xeada7dd6cde0eb1e, 0xf57d4f7fee6ed178,
+    0x06f067aa72176fba, 0x0a637dc5a2c898a6, 0x113f9804bef90dae, 0x1b710b35131c471b,
+    0x28db77f523047d84, 0x32caab7b40c72493, 0x3c9ebe0a15c9bebc, 0x431d67c49c100d4c,
+    0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec, 0x6c44198c4a475817
+];
+
+fn crypto_hashblocks(x: &mut [u8], mut m: &[u8]) -> usize {
+    let mut n = m.len();
+    let mut z = [Wrapping(0u64); 8];
+    let mut b = [Wrapping(0u64); 8];
+    let mut a = [Wrapping(0u64); 8];
+    let mut w = [Wrapping(0u64); 16];
+    let mut t: u64w;
+
+    for i in 0..8 {
+        a[i] = Wrapping(dl64(&x[8 * i..]));
+        z[i] = a[i];
+    }
+
+    while n >= 128 {
+        for i in 0..16 { w[i] = Wrapping(dl64(&m[8 * i..])) }
+
+        for i in 0..80 {
+            for j in 0..8 { b[j] = a[j] }
+            t = a[7] + Sigma1(a[4]) + Ch(a[4],a[5],a[6]) + Wrapping(K[i]) + w[i%16];
+            b[7] = t + Sigma0(a[0]) + Maj(a[0],a[1],a[2]);
+            b[3] += t;
+            for j in 0..8 { a[(j+1)%8] = b[j] }
+            if i%16 == 15 {
+                for j in 0..16 {
+                    w[j] += w[(j+9)%16] + sigma0(w[(j+1)%16]) + sigma1(w[(j+14)%16]);
+                }
+            }
+        }
+
+        for i in 0..8 { a[i] += z[i]; z[i] = a[i] }
+
+        m = &m[128..];
+        n -= 128;
+    }
+
+    for i in 0..8 { ts64(&mut x[8*i..],z[i].0) }
+
+    return n;
+}
+
+const iv: [u8; 64] = [
+    0x6a,0x09,0xe6,0x67,0xf3,0xbc,0xc9,0x08,
+    0xbb,0x67,0xae,0x85,0x84,0xca,0xa7,0x3b,
+    0x3c,0x6e,0xf3,0x72,0xfe,0x94,0xf8,0x2b,
+    0xa5,0x4f,0xf5,0x3a,0x5f,0x1d,0x36,0xf1,
+    0x51,0x0e,0x52,0x7f,0xad,0xe6,0x82,0xd1,
+    0x9b,0x05,0x68,0x8c,0x2b,0x3e,0x6c,0x1f,
+    0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
+    0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79
+];
+
+pub fn crypto_hash(out: &mut[u8], mut m: &[u8]) -> isize {
+    let mut n = m.len();
+    let mut h = [0u8; 64];
+    let mut x = [0u8; 256];
+    let b = n;
+
+    for i in 0..64 { h[i] = iv[i] }
+
+    crypto_hashblocks(&mut h[..],m);
+    m = &m[n - (n & 127)..];
+    n &= 127;
+
+    for i in 0..256 { x[i] = 0 }
+    for i in 0..n { x[i] = m[i] }
+    x[n] = 128;
+
+    n = if n<112 { 128 } else { 256 };
+    x[n-9] = (b >> 61) as u8;
+    ts64(&mut x[n-8..], (b << 3) as u64);
+    crypto_hashblocks(&mut h[..], &x[..n]);
+
+    for i in 0..64 { out[i] = h[i] }
+
+    return 0;
 }
