@@ -70,17 +70,20 @@ fn ld32(x: &[u8]) -> W<u32> {
     W((u << 8) | x[0] as u32)
 }
 
+#[inline(always)]
 fn dl64(x: &[u8]) -> W<u64> {
     let mut u = 0u64;
     for i in 0..8 { u = (u << 8) | x[i] as u64 }
     W(u)
 }
 
+#[inline(always)]
 fn st32(x: &mut [u8], u: W<u32>) {
     let mut u = u;
     for i in 0..4 { x[i] = u.0 as u8; u >>= 8; }
 }
 
+#[inline(always)]
 fn ts64(x: &mut [u8], u: W<u64>) {
     let mut u = u;
     for i in (0..8).rev() { x[i] = u.0 as u8; u >>= 8; }
@@ -214,7 +217,7 @@ pub fn crypto_stream_xor(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) {
 }
 
 #[inline(always)]
-fn add1305(h: &mut [W<u32>], c: &[W<u32>]) {
+fn add1305(h: &mut [W<u32>; 17], c: &[W<u32>; 17]) {
     let mut u = W(0);
     for j in 0..17 {
         u += h[j] + c[j];
@@ -296,7 +299,7 @@ pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8]) -> isize {
 }
 
 pub fn crypto_secretbox(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
-    if c.len() != m.len() { panic!("the length of c and m are not equal") }
+    if c.len() != m.len() { panic!("the length of c and m do not match") }
     if c.len() < 32 { panic!("output buffer < 32 bytes") }
     crypto_stream_xor(c, m, n, k);
     let mut x = [0u8; 16];
@@ -308,7 +311,7 @@ pub fn crypto_secretbox(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<()
 
 pub fn crypto_secretbox_open(m: &mut [u8], c: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
     let mut x = [0u8; 32];
-    if c.len() != m.len() { panic!("the length of c and m are not equal") }
+    if c.len() != m.len() { panic!("the length of c and m do not match") }
     if m.len() < 32 { panic!("output buffer < 32 bytes") }
     crypto_stream(&mut x, n, k);
     if crypto_onetimeauth_verify(&c[16..], &c[32..], &x) != 0 {
@@ -646,6 +649,7 @@ pub fn crypto_hash(out: &mut[u8], mut m: &[u8]) -> isize {
     return 0;
 }
 
+#[inline(always)]
 fn add(p: &mut [gf; 4], q: &[gf; 4]) {
     let mut a = gf0;
     let mut b = gf0;
