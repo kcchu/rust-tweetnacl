@@ -17,31 +17,31 @@ fn hash(b: &mut Bencher, s: usize) {
     let mut h = [0u8; 64];
     randombytes(&mut buf);
     b.iter(|| {
-        tweetnacl::crypto_hash(&mut h[..], &buf);
+        tweetnacl::crypto_hash(&mut h[..], &buf)
     });
 }
 
 #[bench]
 fn hash16(b: &mut Bencher) {
-    hash(b, 16);
+    hash(b, 16)
 }
 
 #[bench]
 fn hash64(b: &mut Bencher) {
-    hash(b, 16);
+    hash(b, 16)
 }
 
 #[bench]
 fn hash256(b: &mut Bencher) {
-    hash(b, 256);
+    hash(b, 256)
 }
 
 #[bench]
 fn hash1024(b: &mut Bencher) {
-    hash(b, 1024);
+    hash(b, 1024)
 }
 
 #[bench]
 fn hash8192(b: &mut Bencher) {
-    hash(b, 8192);
+    hash(b, 8192)
 }

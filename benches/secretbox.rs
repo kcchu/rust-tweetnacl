@@ -18,30 +18,39 @@ const nonce: [u8; 24]
         0xcd, 0x62, 0xbd, 0xa8, 0x75, 0xfc, 0x73, 0xd6,
         0x82, 0x19, 0xe0, 0x03, 0x6b, 0x7a, 0x0b, 0x37 ];
 
-#[bench]
-fn secretbox1k(b: &mut Bencher) {
-    let mut m = [0u8; 1024];
-    let mut m2 = [0u8; 1024];
-    let mut c = [0u8; 1024];
+fn secretbox(b: &mut Bencher, mlen: usize) {
+    let mut m = vec![0u8; mlen + 32];
+    let mut m2 = vec![0u8; mlen + 32];
+    let mut c = vec![0u8; mlen + 32];
     rand::os::OsRng::new().unwrap().fill_bytes(&mut m[32..]);
 
     b.iter(|| {
-        let rs = tweetnacl::crypto_secretbox(&mut c, &m, &nonce, &firstkey);
-        assert!(rs.is_ok());
+        let _ = tweetnacl::crypto_secretbox(&mut c, &m, &nonce, &firstkey);
         tweetnacl::crypto_secretbox_open(&mut m2, &c, &nonce, &firstkey)
     });
 }
 
 #[bench]
-fn secretbox1m(b: &mut Bencher) {
-    let mut m = [0u8; 1024 * 1024];
-    let mut m2 = [0u8; 1024 * 1024];
-    let mut c = [0u8; 1024 * 1024];
-    rand::os::OsRng::new().unwrap().fill_bytes(&mut m[32..]);
+fn secretbox16(b: &mut Bencher) {
+    secretbox(b, 16)
+}
 
-    b.iter(|| {
-        let rs = tweetnacl::crypto_secretbox(&mut c, &m, &nonce, &firstkey);
-        assert!(rs.is_ok());
-        tweetnacl::crypto_secretbox_open(&mut m2, &c, &nonce, &firstkey)
-    });
+#[bench]
+fn secretbox64(b: &mut Bencher) {
+    secretbox(b, 64)
+}
+
+#[bench]
+fn secretbox256(b: &mut Bencher) {
+    secretbox(b, 256)
+}
+
+#[bench]
+fn secretbox1024(b: &mut Bencher) {
+    secretbox(b, 1024)
+}
+
+#[bench]
+fn secretbox8192(b: &mut Bencher) {
+    secretbox(b, 8192)
 }

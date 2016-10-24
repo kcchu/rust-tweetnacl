@@ -13,9 +13,9 @@ fn randombytes(x: &mut [u8]) {
 }
 
 fn do_box(b: &mut Bencher, mlen: usize) {
-    let mut m_ = [0u8; 1024*1024+32];
-    let mut m2 = [0u8; 1024*1024+32];
-    let mut c_ = [0u8; 1024*1024+32];
+    let mut m_ = vec![0u8; mlen + 32];
+    let mut m2 = vec![0u8; mlen + 32];
+    let mut c_ = vec![0u8; mlen + 32];
     let mut alicesk_ = [0u8; 32];
     let mut alicepk_ = [0u8; 32];
     let mut bobsk_ = [0u8; 32];
@@ -27,18 +27,32 @@ fn do_box(b: &mut Bencher, mlen: usize) {
     randombytes(&mut n_);
     randombytes(&mut m_[32..mlen+32]);
     b.iter(|| {
-        let rs = tweetnacl::crypto_box(&mut c_[..mlen+32], &m_[..mlen+32], &n_, &bobpk_, &alicesk_);
-        assert!(rs.is_ok());
-        tweetnacl::crypto_box_open(&mut m2[..mlen+32], &c_[..mlen+32], &n_, &alicepk_, &bobsk_)
+        let _ = tweetnacl::crypto_box(&mut c_, &m_, &n_, &bobpk_, &alicesk_);
+        tweetnacl::crypto_box_open(&mut m2, &c_, &n_, &alicepk_, &bobsk_)
     });
 }
 
 #[bench]
-fn box1k(b: &mut Bencher) {
-    do_box(b, 1024);
+fn box16(b: &mut Bencher) {
+    do_box(b, 16)
 }
 
 #[bench]
-fn box1m(b: &mut Bencher) {
-    do_box(b, 1024 * 1024);
+fn box64(b: &mut Bencher) {
+    do_box(b, 64)
+}
+
+#[bench]
+fn box256(b: &mut Bencher) {
+    do_box(b, 256)
+}
+
+#[bench]
+fn box1024(b: &mut Bencher) {
+    do_box(b, 1024)
+}
+
+#[bench]
+fn box8192(b: &mut Bencher) {
+    do_box(b, 8192)
 }
