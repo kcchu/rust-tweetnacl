@@ -4,11 +4,9 @@
 #![allow(non_upper_case_globals)]
 
 use std::cmp::min;
-use std::num::Wrapping;
+use std::num::Wrapping as W;
 
 pub struct CryptoError;
-
-type u64w = Wrapping<u64>;
 
 macro_rules! sl4 {
     (&mut $s:expr, $b:expr) => {
@@ -60,42 +58,42 @@ const Y: gf = [0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0
 const I: gf = [0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83];
 
 #[inline(always)]
-fn L32(x: u32, c: isize) -> u32 {
-    (x << c) | ((x & 0xffffffff) >> (32 - c))
+fn L32(x: W<u32>, c: usize) -> W<u32> {
+    (x << c) | ((x & W(0xffffffff)) >> (32 - c))
 }
 
 #[inline(always)]
-fn ld32(x: &[u8]) -> u32 {
+fn ld32(x: &[u8]) -> W<u32> {
     let mut u = x[3] as u32;
     u = (u << 8) | x[2] as u32;
     u = (u << 8) | x[1] as u32;
-    (u << 8) | x[0] as u32
+    W((u << 8) | x[0] as u32)
 }
 
-fn dl64(x: &[u8]) -> u64 {
+fn dl64(x: &[u8]) -> W<u64> {
     let mut u = 0u64;
     for i in 0..8 { u = (u << 8) | x[i] as u64 }
-    u
+    W(u)
 }
 
-fn st32(x: &mut [u8], u: u32) {
+fn st32(x: &mut [u8], u: W<u32>) {
     let mut u = u;
-    for i in 0..4 { x[i] = u as u8; u >>= 8; }
+    for i in 0..4 { x[i] = u.0 as u8; u >>= 8; }
 }
 
-fn ts64(x: &mut [u8], u: u64) {
+fn ts64(x: &mut [u8], u: W<u64>) {
     let mut u = u;
-    for i in (0..8).rev() { x[i] = u as u8; u >>= 8; }
+    for i in (0..8).rev() { x[i] = u.0 as u8; u >>= 8; }
 }
 
 fn vn(x: &[u8], y: &[u8]) -> isize {
-    if x.len() != y.len() { panic!("the length of x and y are not equal") }
+    if x.len() != y.len() { panic!("the length of x and y do not match") }
     let n = x.len();
-    let mut d = 0u32;
+    let mut d = W(0);
     for i in 0..n {
-        d |= (x[i] ^ y[i]) as u32;
+        d |= W((x[i] ^ y[i]) as u32);
     }
-    (1 & (d.wrapping_sub(1) >> 8)).wrapping_sub(1) as isize /* returns 0 if equal, 0xFF..FF otherwise */
+    ((W(1) & ((d - W(1)) >> 8)) - W(1)).0 as isize /* returns 0 if equal, 0xFF..FF otherwise */
 }
 
 pub fn crypto_verify_16(x: &[u8], y: &[u8]) -> isize {
@@ -107,10 +105,10 @@ pub fn crypto_verify_32(x: &[u8], y: &[u8]) -> isize {
 }
 
 fn core(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
-    let mut w = [0u32; 16];
-    let mut x = [0u32; 16];
-    let mut y = [0u32; 16];
-    let mut t = [0u32; 4];
+    let mut w = [W(0); 16];
+    let mut x = [W(0); 16];
+    let mut y = [W(0); 16];
+    let mut t = [W(0); 4];
 
     for i in 0..4 {
         x[5*i] = ld32(sl4!(&c, 4*i));
@@ -124,27 +122,27 @@ fn core(out: &mut [u8], inp: &[u8], k: &[u8], c: &[u8], h: bool) {
     for _ in 0..20 {
         for j in 0..4 {
             for m in 0..4 { t[m] = x[(5*j+4*m)%16] }
-            t[1] ^= L32(t[0].wrapping_add(t[3]), 7);
-            t[2] ^= L32(t[1].wrapping_add(t[0]), 9);
-            t[3] ^= L32(t[2].wrapping_add(t[1]),13);
-            t[0] ^= L32(t[3].wrapping_add(t[2]),18);
+            t[1] ^= L32(t[0]+t[3], 7);
+            t[2] ^= L32(t[1]+t[0], 9);
+            t[3] ^= L32(t[2]+t[1],13);
+            t[0] ^= L32(t[3]+t[2],18);
             for m in 0..4 { w[4*j+(j+m)%4] = t[m] }
         }
         for m in 0..16 { x[m] = w[m] }
     }
 
     if h {
-        for i in 0..16 { x[i] = x[i].wrapping_add(y[i]) }
+        for i in 0..16 { x[i] += y[i] }
         for i in 0..4 {
-            x[5*i] = x[5*i].wrapping_sub(ld32(sl4!(&c, 4*i)));
-            x[6+i] = x[6+i].wrapping_sub(ld32(sl4!(&inp, 4*i)));
+            x[5*i] -= ld32(sl4!(&c, 4*i));
+            x[6+i] -= ld32(sl4!(&inp, 4*i));
         }
         for i in 0..4 {
             st32(sl4!(&mut out, 4*i), x[5*i]);
             st32(sl4!(&mut out, 16+4*i), x[6+i]);
         }
     } else {
-        for i in 0..16 { st32(sl4!(&mut out, 4*i), x[i].wrapping_add(y[i])) }
+        for i in 0..16 { st32(sl4!(&mut out, 4*i), x[i] + y[i]) }
     }
 }
 
@@ -216,85 +214,85 @@ pub fn crypto_stream_xor(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) {
 }
 
 #[inline(always)]
-fn add1305(h: &mut [u32], c: &[u32]) {
-    let mut u = 0u32;
+fn add1305(h: &mut [W<u32>], c: &[W<u32>]) {
+    let mut u = W(0);
     for j in 0..17 {
-        u = u.wrapping_add(h[j].wrapping_add(c[j]));
-        h[j] = u & 255;
+        u += h[j] + c[j];
+        h[j] = u & W(255);
         u >>= 8;
     }
 }
 
-const minusp : [u32; 17] = [
-    5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252
+const minusp : [W<u32>; 17] = [
+    W(5), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(0), W(252)
 ];
 
 pub fn crypto_onetimeauth(out: &mut [u8], mut m: &[u8], k: &[u8]) {
     let mut n = m.len();
 
-    let s: u32;
-    let mut u: u32;
-    let mut x = [0u32; 17];
-    let mut r = [0u32; 17];
-    let mut h = [0u32; 17];
-    let mut c = [0u32; 17];
-    let mut g = [0u32; 17];
+    let s: W<u32>;
+    let mut u: W<u32>;
+    let mut x = [W(0); 17];
+    let mut r = [W(0); 17];
+    let mut h = [W(0); 17];
+    let mut c = [W(0); 17];
+    let mut g = [W(0); 17];
 
     // FOR(j,17) r[j]=h[j]=0;
-    for j in 0..16 { r[j] = k[j] as u32 }
-    r[3]&=15;
-    r[4]&=252;
-    r[7]&=15;
-    r[8]&=252;
-    r[11]&=15;
-    r[12]&=252;
-    r[15]&=15;
+    for j in 0..16 { r[j] = W(k[j] as u32) }
+    r[3]&=W(15);
+    r[4]&=W(252);
+    r[7]&=W(15);
+    r[8]&=W(252);
+    r[11]&=W(15);
+    r[12]&=W(252);
+    r[15]&=W(15);
 
     while n > 0 {
-        for j in 0..17 { c[j] = 0 }
+        for j in 0..17 { c[j] = W(0) }
         let j_end = min(16, n);
-        for j in 0..j_end { c[j] = m[j] as u32 }
-        c[j_end] = 1;
+        for j in 0..j_end { c[j] = W(m[j] as u32) }
+        c[j_end] = W(1);
         m = &m[j_end..]; n -= j_end;
         add1305(&mut h, &c);
         for i in 0..17 {
-            x[i] = 0;
+            x[i] = W(0);
             for j in 0..17 {
-                x[i] = x[i].wrapping_add(h[j].wrapping_mul(if j <= i { r[i-j] } else { 320u32.wrapping_mul(r[i+17-j]) }));
+                x[i] += h[j] * if j <= i { r[i - j] } else { W(320) * r[i + 17 - j] };
             }
         }
         for i in 0..17 { h[i] = x[i] }
-        u = 0;
+        u = W(0);
         for j in 0..16 {
-            u = u.wrapping_add(h[j]);
-            h[j] = u & 255;
+            u += h[j];
+            h[j] = u & W(255);
             u >>= 8;
         }
-        u = u.wrapping_add(h[16]); h[16] = u & 3;
-        u = 5u32.wrapping_mul(u >> 2);
+        u += h[16]; h[16] = u & W(3);
+        u = W(5) * (u >> 2);
         for j in 0..16 {
-            u = u.wrapping_add(h[j]);
-            h[j] = u & 255;
+            u += h[j];
+            h[j] = u & W(255);
             u >>= 8;
         }
-        u = u.wrapping_add(h[16]); h[16] = u;
+        u += h[16]; h[16] = u;
     }
 
     for j in 0..17 { g[j] = h[j] }
     add1305(&mut h, &minusp);
-    s = (h[16] >> 7).wrapping_neg();
+    s = -(h[16] >> 7);
     for j in 0..17 { h[j] ^= s & (g[j] ^ h[j]) }
 
-    for j in 0..16 { c[j] = k[j + 16] as u32 }
-    c[16] = 0;
+    for j in 0..16 { c[j] = W(k[j + 16] as u32) }
+    c[16] = W(0);
     add1305(&mut h, &c);
-    for j in 0..16 { out[j] = h[j] as u8 }
+    for j in 0..16 { out[j] = h[j].0 as u8 }
 }
 
 pub fn crypto_onetimeauth_verify(h: &[u8], m: &[u8], k: &[u8]) -> isize {
     let mut x = [0u8; 16];
     crypto_onetimeauth(&mut x, m, k);
-    crypto_verify_16(&h[..16], &x)
+    crypto_verify_16(h, &x)
 }
 
 pub fn crypto_secretbox(c: &mut [u8], m: &[u8], n: &[u8], k: &[u8]) -> Result<(),CryptoError> {
@@ -325,7 +323,7 @@ fn set25519(r: &mut gf, a: &gf) {
     for i in 0..16 { r[i] = a[i] }
 }
 
-fn car25519(o: &mut [i64]) {
+fn car25519(o: &mut gf) {
     let mut c: i64;
     for i in 0..16 {
         o[i] += 1i64 << 16;
@@ -335,7 +333,7 @@ fn car25519(o: &mut [i64]) {
     }
 }
 
-fn sel25519(p: &mut [i64], q: &mut [i64], b: i64) {
+fn sel25519(p: &mut gf, q: &mut gf, b: i64) {
     let mut t: i64;
     let c = !(b-1);
     for i in 0..16 {
@@ -347,12 +345,12 @@ fn sel25519(p: &mut [i64], q: &mut [i64], b: i64) {
 
 fn pack25519(o: &mut [u8], n: &[i64]) {
     let mut b: i64;
-    let m: &mut gf = &mut [0; 16];
-    let t: &mut gf = &mut [0; 16];
+    let mut m = gf0;
+    let mut t = gf0;
     for i in 0..16 { t[i] = n[i] }
-    car25519(t);
-    car25519(t);
-    car25519(t);
+    car25519(&mut t);
+    car25519(&mut t);
+    car25519(&mut t);
     for _ in 0..2 {
         m[0] = t[0] - 0xffed;
         for i in 1..15 {
@@ -362,7 +360,7 @@ fn pack25519(o: &mut [u8], n: &[i64]) {
         m[15] = t[15] - 0x7fff - ((m[14] >> 16) & 1);
         b = (m[15] >> 16) & 1;
         m[14] &= 0xffff;
-        sel25519(t, m, 1 - b);
+        sel25519(&mut t, &mut m, 1 - b);
     }
     for i in 0..16 {
         o[2*i] = (t[i] & 0xff) as u8;
@@ -370,7 +368,7 @@ fn pack25519(o: &mut [u8], n: &[i64]) {
     }
 }
 
-fn neq25519(a: &[i64], b: &[i64]) -> isize {
+fn neq25519(a: &gf, b: &gf) -> isize {
     let mut c = [0u8; 32];
     let mut d = [0u8; 32];
     pack25519(&mut c, a);
@@ -378,7 +376,7 @@ fn neq25519(a: &[i64], b: &[i64]) -> isize {
     crypto_verify_32(&c, &d)
 }
 
-fn par25519(a: &[i64]) -> u8 {
+fn par25519(a: &gf) -> u8 {
     let mut d = [0u8; 32];
     pack25519(&mut d, a);
     d[0] & 1
@@ -392,17 +390,17 @@ fn unpack25519(o: &mut [i64], n: &[u8]) {
 }
 
 #[inline(always)]
-fn A(o: &mut [i64], a: &[i64], b: &[i64]) {
+fn A(o: &mut gf, a: &gf, b: &gf) {
     for i in 0..16 { o[i] = a[i] + b[i] }
 }
 
 #[inline(always)]
-fn Z(o: &mut [i64], a: &[i64], b: &[i64]) {
+fn Z(o: &mut gf, a: &gf, b: &gf) {
     for i in 0..16 { o[i]=a[i]-b[i] }
 }
 
 #[inline(always)]
-fn M(o: &mut [i64], a: &[i64], b: &[i64]) {
+fn M(o: &mut gf, a: &[i64], b: &[i64]) {
     let mut t = [0i64; 31];
     // FOR(i,31) t[i]=0;
     for i in 0..16 { for j in 0..16 { t[i+j]+=a[i]*b[j] }}
@@ -413,7 +411,7 @@ fn M(o: &mut [i64], a: &[i64], b: &[i64]) {
 }
 
 #[inline(always)]
-fn S(o: &mut [i64], a: &[i64]) {
+fn S(o: &mut gf, a: &[i64]) {
     M(o, a, a);
 }
 
@@ -539,13 +537,13 @@ pub fn crypto_box_open(m: &mut [u8], c: &[u8], n: &[u8], y: &[u8], x: &[u8]) -> 
     crypto_box_open_afternm(m, c, n, &k)
 }
 
-fn R(x: u64w, c: usize) -> u64w { (x >> c) | (x << (64 - c)) }
-fn Ch(x: u64w, y: u64w, z: u64w) -> u64w { (x & y) ^ (!x & z) }
-fn Maj(x: u64w, y: u64w, z: u64w) -> u64w { (x & y) ^ (x & z) ^ (y & z) }
-fn Sigma0(x: u64w) -> u64w { R(x,28) ^ R(x,34) ^ R(x,39) }
-fn Sigma1(x: u64w) -> u64w { R(x,14) ^ R(x,18) ^ R(x,41) }
-fn sigma0(x: u64w) -> u64w { R(x, 1) ^ R(x, 8) ^ (x >> 7) }
-fn sigma1(x: u64w) -> u64w { R(x,19) ^ R(x,61) ^ (x >> 6) }
+fn R(x: W<u64>, c: usize) -> W<u64> { (x >> c) | (x << (64 - c)) }
+fn Ch(x: W<u64>, y: W<u64>, z: W<u64>) -> W<u64> { (x & y) ^ (!x & z) }
+fn Maj(x: W<u64>, y: W<u64>, z: W<u64>) -> W<u64> { (x & y) ^ (x & z) ^ (y & z) }
+fn Sigma0(x: W<u64>) -> W<u64> { R(x,28) ^ R(x,34) ^ R(x,39) }
+fn Sigma1(x: W<u64>) -> W<u64> { R(x,14) ^ R(x,18) ^ R(x,41) }
+fn sigma0(x: W<u64>) -> W<u64> { R(x, 1) ^ R(x, 8) ^ (x >> 7) }
+fn sigma1(x: W<u64>) -> W<u64> { R(x,19) ^ R(x,61) ^ (x >> 6) }
 
 const K: [u64; 80] =
 [
@@ -573,23 +571,23 @@ const K: [u64; 80] =
 
 fn crypto_hashblocks(x: &mut [u8], mut m: &[u8]) -> usize {
     let mut n = m.len();
-    let mut z = [Wrapping(0u64); 8];
-    let mut b = [Wrapping(0u64); 8];
-    let mut a = [Wrapping(0u64); 8];
-    let mut w = [Wrapping(0u64); 16];
-    let mut t: u64w;
+    let mut z = [W(0u64); 8];
+    let mut b = [W(0u64); 8];
+    let mut a = [W(0u64); 8];
+    let mut w = [W(0u64); 16];
+    let mut t: W<u64>;
 
     for i in 0..8 {
-        a[i] = Wrapping(dl64(&x[8 * i..]));
+        a[i] = dl64(&x[8 * i..]);
         z[i] = a[i];
     }
 
     while n >= 128 {
-        for i in 0..16 { w[i] = Wrapping(dl64(&m[8 * i..])) }
+        for i in 0..16 { w[i] = dl64(&m[8 * i..]) }
 
         for i in 0..80 {
             for j in 0..8 { b[j] = a[j] }
-            t = a[7] + Sigma1(a[4]) + Ch(a[4],a[5],a[6]) + Wrapping(K[i]) + w[i%16];
+            t = a[7] + Sigma1(a[4]) + Ch(a[4],a[5],a[6]) + W(K[i]) + w[i%16];
             b[7] = t + Sigma0(a[0]) + Maj(a[0],a[1],a[2]);
             b[3] += t;
             for j in 0..8 { a[(j+1)%8] = b[j] }
@@ -606,7 +604,7 @@ fn crypto_hashblocks(x: &mut [u8], mut m: &[u8]) -> usize {
         n -= 128;
     }
 
-    for i in 0..8 { ts64(&mut x[8*i..],z[i].0) }
+    for i in 0..8 { ts64(&mut x[8*i..],z[i]) }
 
     return n;
 }
@@ -640,7 +638,7 @@ pub fn crypto_hash(out: &mut[u8], mut m: &[u8]) -> isize {
 
     n = if n<112 { 128 } else { 256 };
     x[n-9] = (b >> 61) as u8;
-    ts64(&mut x[n-8..], (b << 3) as u64);
+    ts64(&mut x[n-8..], W((b << 3) as u64));
     crypto_hashblocks(&mut h[..], &x[..n]);
 
     for i in 0..64 { out[i] = h[i] }
@@ -648,7 +646,7 @@ pub fn crypto_hash(out: &mut[u8], mut m: &[u8]) -> isize {
     return 0;
 }
 
-fn add(p: &mut [gf;4], q: &[gf;4]) {
+fn add(p: &mut [gf; 4], q: &[gf; 4]) {
     let mut a = gf0;
     let mut b = gf0;
     let mut c = gf0;
@@ -685,7 +683,7 @@ fn add(p: &mut [gf;4], q: &[gf;4]) {
     M(&mut p[3], &e, &h);
 }
 
-fn cswap(p: &mut [gf;4], q: &mut [gf;4], b: u8) {
+fn cswap(p: &mut [gf; 4], q: &mut [gf; 4], b: u8) {
     for i in 0..4 {
         sel25519(&mut p[i], &mut q[i], b as i64);
     }
@@ -702,7 +700,7 @@ fn pack(r: &mut [u8], p: &[gf;4]) {
     r[31] ^= par25519(&tx) << 7;
 }
 
-fn scalarmult(p: &mut [gf;4], q: &mut [gf;4], s: &[u8]) {
+fn scalarmult(p: &mut [gf; 4], q: &mut [gf; 4], s: &[u8]) {
     let mut tmp;
 
     set25519(&mut p[0], &gf0);
@@ -720,7 +718,7 @@ fn scalarmult(p: &mut [gf;4], q: &mut [gf;4], s: &[u8]) {
     }
 }
 
-fn scalarbase(p: &mut [gf;4], s: &[u8]) {
+fn scalarbase(p: &mut [gf; 4], s: &[u8]) {
     let mut q = [gf0; 4];
     set25519(&mut q[0], &X);
     set25519(&mut q[1], &Y);
@@ -748,25 +746,25 @@ pub fn crypto_sign_keypair(pk: &mut [u8], sk: &mut [u8]) -> isize {
 
 const L: [u64; 32] = [0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10];
 
-fn modL(r: &mut [u8], x: &mut [Wrapping<i64>; 64]) {
-    let mut carry: Wrapping<i64>;
+fn modL(r: &mut [u8], x: &mut [W<i64>; 64]) {
+    let mut carry: W<i64>;
     for i in (32..64).rev() {
-        carry = Wrapping(0);
+        carry = W(0);
         for j in (i-32)..(i-12) {
-            x[j] += carry - Wrapping(16) * x[i] * Wrapping(L[j - (i - 32)] as i64);
-            carry = (x[j] + Wrapping(128)) >> 8;
+            x[j] += carry - W(16) * x[i] * W(L[j - (i - 32)] as i64);
+            carry = (x[j] + W(128)) >> 8;
             x[j] -= carry << 8;
         }
         x[i-12] += carry;
-        x[i] = Wrapping(0);
+        x[i] = W(0);
     }
-    carry = Wrapping(0);
+    carry = W(0);
     for j in 0..32 {
-        x[j] += carry - (x[31] >> 4) * Wrapping(L[j] as i64);
+        x[j] += carry - (x[31] >> 4) * W(L[j] as i64);
         carry = x[j] >> 8;
-        x[j] &= Wrapping(255);
+        x[j] &= W(255);
     }
-    for j in 0..32 { x[j] -= carry * Wrapping(L[j] as i64) }
+    for j in 0..32 { x[j] -= carry * W(L[j] as i64) }
     for i in 0..32 {
         x[i+1] += x[i] >> 8;
         r[i] = (x[i].0 & 255) as u8;
@@ -774,9 +772,9 @@ fn modL(r: &mut [u8], x: &mut [Wrapping<i64>; 64]) {
 }
 
 fn reduce(r: &mut [u8]) {
-    let mut x = [Wrapping(0i64); 64];
+    let mut x = [W(0i64); 64];
     for i in 0..64 {
-        x[i] = Wrapping(r[i] as i64);
+        x[i] = W(r[i] as i64);
     }
     for i in 0..64 {
         r[i] = 0;
@@ -789,7 +787,7 @@ pub fn crypto_sign(sm: &mut [u8], smlen: &mut usize, m: &[u8], sk: &[u8]) -> isi
     let mut d = [0u8; 64];
     let mut h = [0u8; 64];
     let mut r = [0u8; 64];
-    let mut x = [Wrapping(0i64); 64];
+    let mut x = [W(0i64); 64];
     let mut p = [gf0; 4];
 
     crypto_hash(&mut d, &sk[..32]);
@@ -810,11 +808,11 @@ pub fn crypto_sign(sm: &mut [u8], smlen: &mut usize, m: &[u8], sk: &[u8]) -> isi
     crypto_hash(&mut h, &sm[..n+64]);
     reduce(&mut h);
 
-    for i in 0..64 { x[i] = Wrapping(0) }
-    for i in 0..32 { x[i] = Wrapping(r[i] as i64) }
+    for i in 0..64 { x[i] = W(0) }
+    for i in 0..32 { x[i] = W(r[i] as i64) }
     for i in 0..32 {
         for j in 0..32 {
-            x[i+j] += Wrapping(h[i] as i64) * Wrapping(d[j] as i64)
+            x[i+j] += W(h[i] as i64) * W(d[j] as i64)
         }
     }
     modL(&mut sm[32..], &mut x);
