@@ -29,11 +29,9 @@ fn sign() {
         let mut smlen = 0usize;
         let mut mlen = 0isize;
         sk[32..].copy_from_slice(&pk[0..32]);
-        let r = tweetnacl::crypto_sign(&mut sm, &mut smlen, &m, &sk);
-        assert_eq!(r, 0);
+        assert!(tweetnacl::crypto_sign(&mut sm, &mut smlen, &m, &sk).is_ok());
         assert_eq!(sm[..64], sig[..]);
-        let r2 = tweetnacl::crypto_sign_open(&mut m2, &mut mlen, &sm[..smlen], &pk);
-        assert_eq!(r2, 0);
+        assert!(tweetnacl::crypto_sign_open(&mut m2, &mut mlen, &sm[..smlen], &pk).is_ok());
         assert_eq!(&m2[..mlen as usize], &m[..]);
     }
 }

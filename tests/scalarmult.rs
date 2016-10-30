@@ -36,20 +36,20 @@ const k: [u8; 32] = [
 #[test]
 fn scalarmult2() {
     let mut out = [0u8; 32];
-    tweetnacl::crypto_scalarmult_base(&mut out, &bobsk);
+    assert!(tweetnacl::crypto_scalarmult_base(&mut out, &bobsk).is_ok());
     assert_eq!(out, bobpk);
 }
 
 #[test]
 fn scalarmult5() {
     let mut out = [0u8; 32];
-    tweetnacl::crypto_scalarmult(&mut out, &alicesk, &bobpk);
+    assert!(tweetnacl::crypto_scalarmult(&mut out, &alicesk, &bobpk).is_ok());
     assert_eq!(out, k);
 }
 
 #[test]
 fn scalarmult6() {
     let mut out = [0u8; 32];
-    tweetnacl::crypto_scalarmult(&mut out, &bobsk, &alicepk);
+    assert!(tweetnacl::crypto_scalarmult(&mut out, &bobsk, &alicepk).is_ok());
     assert_eq!(out, k);
 }

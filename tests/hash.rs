@@ -18,12 +18,12 @@ fn hash() {
 
     let mut h = [0u8; 64];
 
-    tweetnacl::crypto_hash(&mut h[..], &x[..]);
+    assert!(tweetnacl::crypto_hash(&mut h[..], &x[..]).is_ok());
     assert_eq!(&h[..].to_hex(), test);
 
-    tweetnacl::crypto_hash(&mut h[..], &x2[..]);
+    assert!(tweetnacl::crypto_hash(&mut h[..], &x2[..]).is_ok());
     assert_eq!(&h[..].to_hex(), test2);
 
-    tweetnacl::crypto_hash(&mut h[..], &x3[..]);
+    assert!(tweetnacl::crypto_hash(&mut h[..], &x3[..]).is_ok());
     assert_eq!(&h[..].to_hex(), test3);
 }

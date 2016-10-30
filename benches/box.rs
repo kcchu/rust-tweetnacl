@@ -12,6 +12,7 @@ fn randombytes(x: &mut [u8]) {
     rand::os::OsRng::new().unwrap().fill_bytes(x);
 }
 
+#[allow(unused_must_use)]
 fn do_box(b: &mut Bencher, mlen: usize) {
     let mut m_ = vec![0u8; mlen + 32];
     let mut m2 = vec![0u8; mlen + 32];
@@ -21,7 +22,7 @@ fn do_box(b: &mut Bencher, mlen: usize) {
     let mut bobsk_ = [0u8; 32];
     let mut bobpk_ = [0u8; 32];
     let mut n_ = [0u8; 24];
-    unsafe { tweetnacl::randombytes_impl = randombytes }
+    unsafe { tweetnacl::init(randombytes) }
     tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_);
     tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_);
     randombytes(&mut n_);

@@ -90,10 +90,10 @@ fn box7() {
     let mut bobpk_ = [0u8; 32];
     let mut n_ = [0u8; 24];
 
-    unsafe { tweetnacl::randombytes_impl = randombytes }
+    unsafe { tweetnacl::init(randombytes) }
     for mlen in (0..1000).step_by(50) {
-        tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_);
-        tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_);
+        assert!(tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_).is_ok());
+        assert!(tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_).is_ok());
         randombytes(&mut n_);
         randombytes(&mut m_[32..mlen+32]);
         let rs = tweetnacl::crypto_box(&mut c_[..mlen+32], &m_[..mlen+32], &n_, &bobpk_, &alicesk_);
@@ -115,10 +115,10 @@ fn box8() {
     let mut bobpk_ = [0u8; 32];
     let mut n_ = [0u8; 24];
 
-    unsafe { tweetnacl::randombytes_impl = randombytes }
+    unsafe { tweetnacl::init(randombytes) }
     for mlen in (0..1000).step_by(50) {
-        tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_);
-        tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_);
+        assert!(tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_).is_ok());
+        assert!(tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_).is_ok());
         randombytes(&mut n_);
         randombytes(&mut m_[32..mlen+32]);
         let rs = tweetnacl::crypto_box(&mut c_[..mlen+32], &m_[..mlen+32], &n_, &bobpk_, &alicesk_);

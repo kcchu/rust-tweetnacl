@@ -12,6 +12,7 @@ fn randombytes(x: &mut [u8]) {
     rand::os::OsRng::new().unwrap().fill_bytes(x);
 }
 
+#[allow(unused_must_use)]
 fn sign(b: &mut Bencher, mlen: usize) {
     let mut m = vec![0u8; mlen];
     let mut sm = vec![0u8; mlen + 64];
@@ -20,7 +21,7 @@ fn sign(b: &mut Bencher, mlen: usize) {
     let mut m2len = 0isize;
     let mut pk = [0u8; 32];
     let mut sk = [0u8; 64];
-    unsafe { tweetnacl::randombytes_impl = randombytes }
+    unsafe { tweetnacl::init(randombytes) }
     tweetnacl::crypto_sign_keypair(&mut pk, &mut sk);
     randombytes(&mut m);
     b.iter(|| {
