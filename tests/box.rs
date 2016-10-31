@@ -2,7 +2,6 @@
 // Test vectors adapted from libsodium
 //
 
-#![feature(step_by)]
 #![allow(non_upper_case_globals)]
 
 extern crate rand;
@@ -91,7 +90,8 @@ fn box7() {
     let mut n_ = [0u8; 24];
 
     unsafe { tweetnacl::init(randombytes) }
-    for mlen in (0..1000).step_by(50) {
+    for i in -1..13 {
+        let mlen = if i < 0 { 0 } else { 2usize.pow(i as u32) };
         assert!(tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_).is_ok());
         assert!(tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_).is_ok());
         randombytes(&mut n_);
@@ -116,7 +116,8 @@ fn box8() {
     let mut n_ = [0u8; 24];
 
     unsafe { tweetnacl::init(randombytes) }
-    for mlen in (0..1000).step_by(50) {
+    for i in -1..13 {
+        let mlen = if i < 0 { 0 } else { 2usize.pow(i as u32) };
         assert!(tweetnacl::crypto_box_keypair(&mut alicepk_, &mut alicesk_).is_ok());
         assert!(tweetnacl::crypto_box_keypair(&mut bobpk_, &mut bobsk_).is_ok());
         randombytes(&mut n_);
